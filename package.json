@@ -1,0 +1,26 @@
+{
+  "name": "aivo-ai",
+  "version": "1.0.0",
+  "description": "Aivo: a clean chat app on Netlify",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CMRjr16/AIVO-AI.git"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CMRjr16/AIVO-AI/issues"
+  },
+  "homepage": "https://github.com/CMRjr16/AIVO-AI#readme",
+  "dependencies": {
+    "@netlify/database": "^2.0.1",
+    "@netlify/functions": "^6.0.3",
+    "@netlify/identity": "^2.0.0",
+    "drizzle-orm": "^1.0.0-beta.22"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^1.0.0-beta.22"
+  },
+  "private": true,
+  "type": "module"
+}

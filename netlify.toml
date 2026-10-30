@@ -1,0 +1,5 @@
+[build]
+  # Overrides the project's base directory setting, which points to a folder that doesn't exist
+  base = "."
+  publish = "public"
+  functions = "netlify/functions"
