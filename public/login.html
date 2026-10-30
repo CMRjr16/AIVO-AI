@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aivo - Log in</title>
+<style>
+  :root { --bg:#07070d; --card:#12121d; --line:#26263a; --text:#ecebf5; --muted:#8c8ba5; --violet:#7c5cff; --cyan:#22d3ee; --err:#ff6b81; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:radial-gradient(circle at 20% 0%, #17133a 0%, var(--bg) 55%); color:var(--text); font-family:system-ui,-apple-system,Segoe UI,sans-serif; padding:20px; }
+  .box { width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:18px; padding:28px 24px; }
+  h1 { margin:0 0 4px; font-size:28px; letter-spacing:1px; }
+  h1 span { color:var(--cyan); }
+  p.sub { margin:0 0 22px; color:var(--muted); font-size:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
+  input { width:100%; padding:12px 14px; background:#0b0b14; border:1px solid var(--line); border-radius:10px; color:var(--text); font-size:16px; }
+  input:focus { outline:2px solid var(--violet); border-color:transparent; }
+  button.main { width:100%; margin-top:20px; padding:13px; border:0; border-radius:10px; background:var(--violet); color:#fff; font-size:16px; font-weight:600; cursor:pointer; }
+  button.main:disabled { opacity:.6; }
+  .links { display:flex; justify-content:space-between; margin-top:16px; font-size:14px; }
+  .links a { color:var(--cyan); cursor:pointer; text-decoration:none; }
+  #msg { margin-top:16px; font-size:14px; min-height:20px; line-height:1.4; }
+  #msg.err { color:var(--err); }
+  #msg.ok { color:var(--cyan); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Aivo<span>.</span></h1>
+  <p class="sub" id="sub">Log in to your account</p>
+
+  <div id="emailWrap">
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" placeholder="you@example.com">
+  </div>
+
+  <div id="passWrap">
+    <label for="password" id="passLabel">Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters">
+  </div>
+
+  <button class="main" id="go">Log in</button>
+  <div id="msg" role="status"></div>
+
+  <div class="links" id="links">
+    <a id="toggle">Create account</a>
+    <a id="forgot">Forgot password?</a>
+  </div>
+</div>
+
+<script type="module">
+  import { login, signup, getUser, requestPasswordRecovery, handleAuthCallback,
+           updateUser, acceptInvite, AuthError, MissingIdentityError } from "/vendor/netlify-identity.js";
+
+  const $ = id => document.getElementById(id);
+  // "login" | "signup" | "reset" (set a new password after recovery) | "invite"
+  let mode = "login";
+  let inviteToken = null;
+
+  function say(text, kind) { $("msg").textContent = text; $("msg").className = kind || ""; }
+
+  function friendly(e) {
+    if (e instanceof MissingIdentityError) return "Accounts are not switched on for this site yet.";
+    if (e instanceof AuthError) {
+      const m = (e.message || "").toLowerCase();
+      if (m.includes("not confirmed")) return "Confirm your email first. Check your inbox for the link.";
+      if (m.includes("already registered") || m.includes("already exists")) return "This email already has an account. Try logging in.";
+      if (e.status === 401 || m.includes("invalid")) return "Wrong email or password.";
+      if (e.status === 403) return "New sign-ups are closed right now.";
+      if (e.status === 422) return "Check your email, and use a password of at least 6 characters.";
+      if (e.status === 429) return "Too many tries. Wait a minute and try again.";
+    }
+    return e.message || "Something went wrong.";
+  }
+
+  function setMode(next) {
+    mode = next;
+    const copy = {
+      login:  ["Log in to your account", "Log in", "Password", "current-password"],
+      signup: ["Create your account", "Create account", "Password", "new-password"],
+      reset:  ["Choose a new password", "Save password", "New password", "new-password"],
+      invite: ["Set a password to join", "Join Aivo", "Password", "new-password"],
+    }[mode];
+    $("sub").textContent = copy[0];
+    $("go").textContent = copy[1];
+    $("passLabel").textContent = copy[2];
+    $("password").autocomplete = copy[3];
+    $("toggle").textContent = mode === "signup" ? "I have an account" : "Create account";
+    $("emailWrap").hidden = mode === "reset" || mode === "invite";
+    $("links").hidden = mode === "reset" || mode === "invite";
+    say("");
+  }
+
+  const goApp = () => location.replace("/");
+
+  $("toggle").onclick = () => setMode(mode === "signup" ? "login" : "signup");
+
+  $("go").onclick = async () => {
+    const email = $("email").value.trim();
+    const pass = $("password").value;
+    if ((mode === "login" || mode === "signup") && !email) return say("Enter your email and password.", "err");
+    if (!pass) return say("Enter a password.", "err");
+    if (mode !== "login" && pass.length < 6) return say("Password must be at least 6 characters.", "err");
+    $("go").disabled = true; say("One moment...");
+    try {
+      if (mode === "login") { await login(email, pass); goApp(); }
+      else if (mode === "signup") {
+        const user = await signup(email, pass, { full_name: email.split("@")[0] });
+        if (user.confirmedAt) goApp();
+        else { setMode("login"); $("email").value = email; say("Almost there. We sent a confirmation link to " + email + ". Open it, then log in.", "ok"); }
+      }
+      else if (mode === "reset") { await updateUser({ password: pass }); goApp(); }
+      else if (mode === "invite") { await acceptInvite(inviteToken, pass); goApp(); }
+    } catch (e) { say(friendly(e), "err"); }
+    $("go").disabled = false;
+  };
+
+  $("forgot").onclick = async () => {
+    const email = $("email").value.trim();
+    if (!email) return say("Type your email first, then tap Forgot password.", "err");
+    try { await requestPasswordRecovery(email); say("Reset link sent. Check your email.", "ok"); }
+    catch (e) { say(friendly(e), "err"); }
+  };
+
+  $("password").addEventListener("keydown", e => { if (e.key === "Enter") $("go").click(); });
+
+  // Handle links from emails (confirm account, reset password, invite), then skip
+  // straight to the app if already signed in.
+  (async () => {
+    try {
+      const result = await handleAuthCallback();
+      if (result) {
+        history.replaceState(null, "", location.pathname);
+        if (result.type === "recovery") return setMode("reset");
+        if (result.type === "invite") { inviteToken = result.token; return setMode("invite"); }
+        return goApp();
+      }
+    } catch (e) { return say(friendly(e), "err"); }
+    if (await getUser()) goApp();
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aivo</title>
+<style>
+  :root{
+    --bg:#07080d; --panel:#0d0f17; --line:#1b1f2e; --text:#e8eaf2; --muted:#7d849c;
+    --violet:#7c5cff; --mine:#4b33c4; --theirs:#151826; --ai:#22d3ee; --danger:#ff6b81;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input{font:inherit;color:var(--text)}
+  :focus-visible{outline:2px solid var(--violet);outline-offset:2px}
+
+  /* Error box: any problem shows here instead of a blank page */
+  #errbox{display:none;position:fixed;z-index:99;left:0;right:0;top:0;padding:14px 16px;
+    background:#2a0d14;border-bottom:1px solid var(--danger);color:#ffd5db;font-size:14px;line-height:1.4;
+    white-space:pre-wrap;word-break:break-word}
+  #errbox b{color:#fff}
+
+  #app{height:100%;display:flex}
+  #side{width:360px;max-width:100%;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+  #main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+  header.bar{display:flex;align-items:center;gap:8px;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line)}
+  .wordmark{font-size:24px;font-weight:700;letter-spacing:.04em;flex:1}
+  .wordmark span{color:var(--ai)}
+  .icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:var(--muted);font-size:18px}
+  .icon:hover{background:var(--line);color:var(--text)}
+
+  #chatList{flex:1;overflow-y:auto}
+  .row{display:flex;gap:12px;align-items:center;padding:10px 16px;cursor:pointer;width:100%;text-align:left}
+  .row:hover,.row.active{background:#141827}
+  .avatar{width:44px;height:44px;flex:none;border-radius:50%;display:grid;place-items:center;font-weight:600;
+    background:linear-gradient(135deg,#2a2f4a,#1a1d30);color:#cfd4ee}
+  .avatar.group{box-shadow:0 0 0 2px #7cc4ff}   /* group chats: light blue ring; one-to-one: plain */
+  .rowtext{min-width:0;flex:1}
+  .rowtop{display:flex;justify-content:space-between;gap:8px}
+  .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .time{font-size:12px;color:var(--muted);flex:none}
+  .preview{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .empty{padding:32px 24px;color:var(--muted);line-height:1.5;text-align:center}
+  .empty b{display:block;color:var(--text);font-size:16px;margin-bottom:6px}
+
+  #welcome{flex:1;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted);line-height:1.6}
+  #welcome .big{font-size:34px;font-weight:700;letter-spacing:.04em;color:var(--text);margin-bottom:8px}
+  #welcome .big span{color:var(--ai)}
+  #chat{flex:1;display:none;flex-direction:column;min-height:0}
+  #msgs{flex:1;overflow-y:auto;padding:14px 14px 8px;display:flex;flex-direction:column;gap:4px}
+  .msg{max-width:78%;padding:6px 11px;border-radius:14px;font-size:15px;line-height:1.35;word-break:break-word;white-space:pre-wrap}
+  .msg.mine{align-self:flex-end;background:var(--mine);border-bottom-right-radius:4px}
+  .msg.theirs{align-self:flex-start;background:var(--theirs);border-bottom-left-radius:4px}
+  .msg small{display:block;font-size:11px;color:#a9b0cc;text-align:right;margin-top:1px;opacity:.8}
+  #composer{display:flex;gap:8px;align-items:center;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--panel)}
+  #msgInput{flex:1;background:#12151f;border:1px solid var(--line);border-radius:22px;padding:11px 16px;min-width:0}
+  #msgInput::placeholder{color:var(--muted)}
+  #aiBtn{color:var(--ai);font-size:20px}
+  #sendBtn{width:42px;height:42px;border-radius:50%;background:var(--violet);display:grid;place-items:center;font-size:18px}
+  #sendBtn:disabled{opacity:.4}
+  #back{display:none}
+
+  /* Sheets (new chat, settings) */
+  .sheet-bg{display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);align-items:center;justify-content:center;padding:16px}
+  .sheet{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+  .sheet h2{font-size:18px;margin-bottom:12px}
+  .sheet p{color:var(--muted);font-size:14px;line-height:1.5;margin-bottom:12px}
+  .sheet input{width:100%;background:#12151f;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+  .btns{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+  .btn{padding:10px 16px;border-radius:12px;background:var(--line)}
+  .btn.primary{background:var(--violet)}
+  .btn.danger{color:var(--danger)}
+  .formerr{color:var(--danger);font-size:14px;margin-bottom:8px;min-height:0}
+  .acct{padding:12px 14px;border-radius:12px;background:#12151f;margin-bottom:12px;font-size:14px;word-break:break-all}
+  .acct span{display:block;color:var(--muted);font-size:12px;margin-bottom:2px}
+  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#1b2030;border:1px solid var(--ai);color:var(--text);
+    padding:10px 16px;border-radius:12px;font-size:14px;display:none;z-index:60;max-width:90%}
+
+  @media (max-width:720px){
+    #side{width:100%}
+    #main{display:none}
+    #app.show-chat #side{display:none}
+    #app.show-chat #main{display:flex}
+    #back{display:grid}
+  }
+  @media (prefers-reduced-motion:no-preference){ .row{transition:background .15s} }
+</style>
+</head>
+<body>
+
+<div id="errbox"></div>
+
+<div id="app">
+  <aside id="side">
+    <header class="bar">
+      <div class="wordmark">Aivo<span>.</span></div>
+      <button class="icon" id="newBtn" aria-label="New chat">＋</button>
+      <button class="icon" id="setBtn" aria-label="Settings">⚙</button>
+    </header>
+    <div id="chatList"><div class="empty">Loading your chats…</div></div>
+  </aside>
+
+  <main id="main">
+    <div id="welcome">
+      <div>
+        <div class="big">Aivo<span>.</span></div>
+        Pick a chat on the left, or tap ＋ to start one with a friend's email.
+      </div>
+    </div>
+    <section id="chat">
+      <header class="bar">
+        <button class="icon" id="back" aria-label="Back">←</button>
+        <div class="avatar" id="chatAvatar"></div>
+        <div class="name" id="chatName" style="flex:1"></div>
+      </header>
+      <div id="msgs"></div>
+      <div id="composer">
+        <button class="icon" id="aiBtn" aria-label="AI tools">✦</button>
+        <input id="msgInput" placeholder="Message" autocomplete="off">
+        <button id="sendBtn" aria-label="Send">➤</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- New chat -->
+<div class="sheet-bg" id="newSheet">
+  <div class="sheet">
+    <h2>New chat</h2>
+    <p>Enter the email your friend used to create their Aivo account.</p>
+    <input id="newEmail" type="email" placeholder="friend@example.com" autocomplete="off">
+    <div class="formerr" id="newErr"></div>
+    <div class="btns">
+      <button class="btn" id="newCancel">Cancel</button>
+      <button class="btn primary" id="newGo">Start chat</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="sheet-bg" id="setSheet">
+  <div class="sheet">
+    <h2>Settings</h2>
+    <div class="acct"><span>Signed in as</span><b id="setEmail"></b></div>
+    <div class="btns">
+      <button class="btn" id="setClose">Close</button>
+      <button class="btn danger" id="logoutBtn">Log out</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Classic script first: catches errors from everything below and shows them on screen -->
+<script>
+  (function(){
+    var box = document.getElementById('errbox');
+    window.showErr = function(title, detail){
+      box.style.display = 'block';
+      box.innerHTML = '';
+      var b = document.createElement('b'); b.textContent = title;
+      box.appendChild(b);
+      if (detail) box.appendChild(document.createTextNode('\n' + detail));
+    };
+    window.addEventListener('error', function(e){
+      showErr('Something went wrong on this page', (e.message || 'Unknown error') + (e.filename ? '\n' + e.filename + ':' + e.lineno : ''));
+    });
+    window.addEventListener('unhandledrejection', function(e){
+      var r = e.reason; showErr('Something went wrong', (r && r.message) || String(r || 'Unknown error'));
+    });
+    setTimeout(function(){
+      if (!window.__aivoReady) showErr('Aivo could not start', 'The page loaded but the app did not finish starting.\nCheck your internet connection and reload.');
+    }, 8000);
+  })();
+</script>
+
+<script type="module">
+  import { getUser, logout } from "/vendor/netlify-identity.js";
+
+  const $ = id => document.getElementById(id);
+  const appEl = $('app');
+
+  const CHATS_EVERY_MS = 10000;
+  const MSGS_EVERY_MS = 3000;
+
+  let me = null;
+  let chats = [];
+  let currentId = null;
+  let lastMsgId = 0;
+  let msgTimer = null;
+
+  /* ---------- API ---------- */
+  async function api(path, options = {}){
+    const res = await fetch(path, {
+      ...options,
+      credentials: 'same-origin',
+      headers: options.body ? { 'Content-Type': 'application/json' } : undefined,
+    });
+    if (res.status === 401) { location.replace('/login.html'); throw new Error('Signed out'); }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+    return data;
+  }
+
+  /* ---------- helpers ---------- */
+  const nameOf = email => (email || '?').split('@')[0];
+  const initial = email => nameOf(email).charAt(0).toUpperCase();
+  function fmtTime(ts){
+    if (!ts) return '';
+    const d = new Date(ts), now = new Date();
+    return d.toDateString() === now.toDateString()
+      ? d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+      : d.toLocaleDateString([], {day:'numeric', month:'short'});
+  }
+  function toast(t){
+    const el = $('toast'); el.textContent = t; el.style.display = 'block';
+    clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2600);
+  }
+
+  /* ---------- chat list ---------- */
+  function renderList(){
+    const list = $('chatList');
+    list.innerHTML = '';
+    if (!chats.length){
+      list.innerHTML = '<div class="empty"><b>No chats yet</b>Tap ＋ at the top and enter a friend’s email to start your first chat.</div>';
+      return;
+    }
+    chats.forEach(c => {
+      const row = document.createElement('button');
+      row.className = 'row' + (c.id === currentId ? ' active' : '');
+      row.innerHTML = '<div class="avatar"></div><div class="rowtext"><div class="rowtop"><span class="name"></span><span class="time"></span></div><div class="preview"></div></div>';
+      row.querySelector('.avatar').textContent = initial(c.otherEmail);
+      row.querySelector('.name').textContent = c.otherName || nameOf(c.otherEmail);
+      row.querySelector('.time').textContent = fmtTime(c.updatedAt);
+      row.querySelector('.preview').textContent = c.lastMessage || 'Say hello';
+      row.onclick = () => openChat(c);
+      list.appendChild(row);
+    });
+  }
+
+  async function loadChats(){
+    try {
+      chats = await api('/api/chats');
+      renderList();
+    } catch (err) {
+      if (!chats.length) showErr('Could not load your chats', err.message);
+    }
+  }
+
+  /* ---------- open chat + messages ---------- */
+  function addMessages(list){
+    const msgs = $('msgs');
+    const atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
+    list.forEach(m => {
+      if (m.id <= lastMsgId) return;
+      lastMsgId = m.id;
+      const el = document.createElement('div');
+      el.className = 'msg ' + (m.senderId === me.id ? 'mine' : 'theirs');
+      el.appendChild(document.createTextNode(m.text));
+      const t = document.createElement('small');
+      t.textContent = fmtTime(m.createdAt);
+      el.appendChild(t);
+      msgs.appendChild(el);
+    });
+    if (atBottom || list.some(m => m.senderId === me.id)) msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  async function pollMessages(){
+    const id = currentId;
+    if (!id || document.hidden) return;
+    try {
+      const list = await api('/api/chats/' + id + '/messages?after=' + lastMsgId);
+      if (id === currentId) addMessages(list);
+    } catch (err) { /* try again on the next tick */ }
+  }
+
+  async function openChat(c){
+    currentId = c.id;
+    lastMsgId = 0;
+    $('welcome').style.display = 'none';
+    $('chat').style.display = 'flex';
+    $('chatName').textContent = c.otherName || nameOf(c.otherEmail);
+    $('chatAvatar').textContent = initial(c.otherEmail);
+    appEl.classList.add('show-chat');
+    renderList();
+    const msgs = $('msgs'); msgs.innerHTML = '';
+    clearInterval(msgTimer);
+    try {
+      const list = await api('/api/chats/' + c.id + '/messages');
+      if (c.id !== currentId) return;
+      addMessages(list);
+      msgs.scrollTop = msgs.scrollHeight;
+    } catch (err) {
+      showErr('Could not load messages', err.message);
+    }
+    msgTimer = setInterval(pollMessages, MSGS_EVERY_MS);
+    $('msgInput').focus();
+  }
+
+  async function sendMessage(){
+    const input = $('msgInput');
+    const text = input.value.trim();
+    if (!text || !currentId) return;
+    input.value = '';
+    $('sendBtn').disabled = true;
+    try {
+      const msg = await api('/api/chats/' + currentId + '/messages', { method: 'POST', body: JSON.stringify({ text }) });
+      // Pick up anything that arrived just before this message, then show ours
+      await pollMessages();
+      addMessages([msg]);
+      const c = chats.find(x => x.id === currentId);
+      if (c) { c.lastMessage = text; c.updatedAt = msg.createdAt; chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); renderList(); }
+    } catch (err) {
+      input.value = text;
+      showErr('Message not sent', err.message);
+    } finally {
+      $('sendBtn').disabled = false;
+      input.focus();
+    }
+  }
+
+  /* ---------- new chat by email ---------- */
+  async function startChat(){
+    const err = $('newErr'); err.textContent = '';
+    const email = $('newEmail').value.trim().toLowerCase();
+    if (!email || !email.includes('@')) { err.textContent = 'Enter a full email address.'; return; }
+    if (email === me.email.toLowerCase()) { err.textContent = 'That is your own email. Enter a friend’s email.'; return; }
+    $('newGo').disabled = true;
+    try {
+      const chat = await api('/api/chats', { method: 'POST', body: JSON.stringify({ email }) });
+      $('newSheet').style.display = 'none';
+      $('newEmail').value = '';
+      await loadChats();
+      openChat(chat);
+    } catch (e) {
+      err.textContent = e.message;
+    } finally {
+      $('newGo').disabled = false;
+    }
+  }
+
+  /* ---------- buttons ---------- */
+  $('newBtn').onclick = () => { $('newErr').textContent = ''; $('newSheet').style.display = 'flex'; $('newEmail').focus(); };
+  $('newCancel').onclick = () => $('newSheet').style.display = 'none';
+  $('newGo').onclick = startChat;
+  $('newEmail').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
+  $('setBtn').onclick = () => { $('setEmail').textContent = me ? me.email : ''; $('setSheet').style.display = 'flex'; };
+  $('setClose').onclick = () => $('setSheet').style.display = 'none';
+  $('logoutBtn').onclick = async () => { try { await logout(); } finally { location.replace('/login.html'); } };
+  $('sendBtn').onclick = sendMessage;
+  $('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMessage(); });
+  $('aiBtn').onclick = () => toast('AI tools (rewrite, shorter, translate) come right after chat works.');
+  $('back').onclick = () => { appEl.classList.remove('show-chat'); currentId = null; clearInterval(msgTimer); renderList(); };
+  document.querySelectorAll('.sheet-bg').forEach(bg =>
+    bg.addEventListener('click', e => { if (e.target === bg) bg.style.display = 'none'; }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadChats(); pollMessages(); } });
+
+  /* ---------- start: require login, save profile, load chats ---------- */
+  (async () => {
+    const user = await getUser();
+    window.__aivoReady = true;
+    if (!user) { location.replace('/login.html'); return; }
+    try {
+      me = await api('/api/me');
+    } catch (err) {
+      showErr('Could not load your account', err.message);
+      return;
+    }
+    await loadChats();
+    setInterval(() => { if (!document.hidden) loadChats(); }, CHATS_EVERY_MS);
+  })();
+</script>
+</body>
+</html>
